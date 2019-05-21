@@ -50,12 +50,13 @@ func doReduce(
 	//
 	// Your code here (Part I).
 	//
-	input, err := os.Open(jobName)
+	mapTask := ihash(jobName) % nMap
+	input, err := os.Open(reduceName(jobName, mapTask, reduceTask))
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer input.Close()
-	pairs := make(map[string][]KeyValue)
+	pairs := make(map[string][]string)
 	dec := json.NewDecoder(input)
 	_, err = dec.Token()
 	if err != nil {
@@ -63,13 +64,12 @@ func doReduce(
 	}
 	for dec.More() {
 		var kv KeyValue
-		// decode an array value (Message)
 		err := dec.Decode(&kv)
 		if err != nil {
 			log.Fatal(err)
 		}
-		if ex,_ := pairs[kv.Key],ex != true {
-			pairs[kv.Key] = make([]KeyValue, 0 , 1000)
+		if _, ex := pairs[kv.Key]; ex != true {
+			pairs[kv.Key] = make([]string, 0, 1000)
 		}
 		pairs[kv.Key] = append(pairs[kv.Key], kv.Value)
 	}
@@ -78,16 +78,19 @@ func doReduce(
 		log.Fatal(err)
 	}
 	ret := make([]KeyValue, 0, 1000)
-	for key,values := range pairs {
+	for key, values := range pairs {
 		ret = append(ret, KeyValue{
-			key, 
+			key,
 			reduceF(key, values),
 		})
 	}
-	output := os.OpenFile(outFile, os.O_CREATE|os.O_WRONLY, 0666)
+	output, err := os.OpenFile(outFile, os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer output.Close()
 	enc := json.NewEncoder(output)
-	for _,kv := range ret {
+	for _, kv := range ret {
 		err := enc.Encode(kv)
 		if err != nil {
 			log.Fatal(err)

@@ -5,7 +5,6 @@ import (
 	"hash/fnv"
 	"log"
 	"os"
-	"strconv"
 )
 
 func doMap(
@@ -69,8 +68,8 @@ func doMap(
 	}
 	if nReduce > 0 {
 		kvpairs := mapF(inFile, string(contents[:]))
-		suffix := ihash(jobName) % nReduce
-		output, err := os.OpenFile(jobName+strconv.Itoa(suffix), os.O_CREATE|os.O_WRONLY, 0666)
+		reduceTask := ihash(jobName) % nReduce
+		output, err := os.OpenFile(mergeName(jobName, reduceTask), os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			log.Fatal(err)
 		}
