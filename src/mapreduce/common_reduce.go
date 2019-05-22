@@ -2,9 +2,16 @@ package mapreduce
 
 import (
 	"encoding/json"
-	"log"
 	"os"
+	"sort"
+	"strings"
 )
+
+type ByKey []KeyValue
+
+func (kv ByKey) Len() int           { return len(kv) }
+func (kv ByKey) Swap(i, j int)      { kv[i], kv[j] = kv[j], kv[i] }
+func (kv ByKey) Less(i, j int) bool { return strings.Compare(kv[i].Key, kv[j].Key) == -1 }
 
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
@@ -51,22 +58,20 @@ func doReduce(
 	// Your code here (Part I).
 	//
 	mapTask := ihash(jobName) % nMap
-	input, err := os.Open(reduceName(jobName, mapTask, reduceTask))
-	if err != nil {
-		log.Fatal(err)
-	}
+	inFile := reduceName(jobName, mapTask, reduceTask)
+	input, err := os.Open(inFile)
+	checkError(err)
 	defer input.Close()
+	debug("Open input file %s\n", inFile)
 	pairs := make(map[string][]string)
 	dec := json.NewDecoder(input)
 	_, err = dec.Token()
-	if err != nil {
-		log.Fatal(err)
-	}
+	checkError(err)
 	for dec.More() {
 		var kv KeyValue
 		err := dec.Decode(&kv)
 		if err != nil {
-			log.Fatal(err)
+			break
 		}
 		if _, ex := pairs[kv.Key]; ex != true {
 			pairs[kv.Key] = make([]string, 0, 1000)
@@ -74,9 +79,7 @@ func doReduce(
 		pairs[kv.Key] = append(pairs[kv.Key], kv.Value)
 	}
 	_, err = dec.Token()
-	if err != nil {
-		log.Fatal(err)
-	}
+	checkError(err)
 	ret := make([]KeyValue, 0, 1000)
 	for key, values := range pairs {
 		ret = append(ret, KeyValue{
@@ -84,16 +87,13 @@ func doReduce(
 			reduceF(key, values),
 		})
 	}
+	sort.Sort(ByKey(ret))
 	output, err := os.OpenFile(outFile, os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
+	checkError(err)
 	defer output.Close()
 	enc := json.NewEncoder(output)
 	for _, kv := range ret {
 		err := enc.Encode(kv)
-		if err != nil {
-			log.Fatal(err)
-		}
+		checkError(err)
 	}
 }

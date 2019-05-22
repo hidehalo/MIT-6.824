@@ -3,6 +3,7 @@ package mapreduce
 import (
 	"encoding/json"
 	"hash/fnv"
+	"io/ioutil"
 	"log"
 	"os"
 )
@@ -61,26 +62,28 @@ func doMap(
 		log.Fatal(err)
 	}
 	defer input.Close()
-	var contents []byte
-	_, err = input.Read(contents)
-	if err != nil {
-		log.Fatal(err)
+	debug("Open input file %s\n", inFile)
+	contents, err := ioutil.ReadFile(inFile)
+	checkError(err)
+	debug("Read from input file %s\n", inFile)
+	kvpairs := mapF(inFile, string(contents[:]))
+	var output *File
+	files := make(map[string]*os.File)
+	for _, kv := range kvpairs {
+		reduceTask := ihash(kv.Key) % nReduce
+		outputFile := reduceName(jobName, mapTask, reduceTask)
+		if _, ex := files[outputFile]; ex != true {
+			output, err := os.OpenFile(outputFile, os.O_CREATE|os.O_WRONLY, 0666)
+			checkError(err)
+			defer output.Close()
+		} else {
+			output := files[outputFile]
+		}
 	}
-	if nReduce > 0 {
-		kvpairs := mapF(inFile, string(contents[:]))
-		reduceTask := ihash(jobName) % nReduce
-		output, err := os.OpenFile(mergeName(jobName, reduceTask), os.O_CREATE|os.O_WRONLY, 0666)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer output.Close()
-		enc := json.NewEncoder(output)
-		for _, kv := range kvpairs {
-			err = enc.Encode(&kv)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
+	enc := json.NewEncoder(output)
+	for _, kv := range kvpairs {
+		err = enc.Encode(&kv)
+		checkError(err)
 	}
 }
 
