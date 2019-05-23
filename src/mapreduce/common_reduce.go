@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// ByKey Sort KeyValue array by KeyValue.Key
 type ByKey []KeyValue
 
 func (kv ByKey) Len() int           { return len(kv) }
@@ -57,29 +58,32 @@ func doReduce(
 	//
 	// Your code here (Part I).
 	//
-	mapTask := ihash(jobName) % nMap
-	inFile := reduceName(jobName, mapTask, reduceTask)
-	input, err := os.Open(inFile)
-	checkError(err)
-	defer input.Close()
-	debug("Open input file %s\n", inFile)
+	data := make([]KeyValue, 0, 1000)
 	pairs := make(map[string][]string)
-	dec := json.NewDecoder(input)
-	_, err = dec.Token()
-	checkError(err)
-	for dec.More() {
-		var kv KeyValue
-		err := dec.Decode(&kv)
-		if err != nil {
-			break
+
+	for mapTask := 0; mapTask < nMap; mapTask++ {
+		inFile := reduceName(jobName, mapTask, reduceTask)
+		input, err := os.Open(inFile)
+		checkError(err)
+		dec := json.NewDecoder(input)
+		for dec.More() {
+			var kv KeyValue
+			err := dec.Decode(&kv)
+			checkError(err)
+			data = append(data, kv)
 		}
+		input.Close()
+	}
+
+	sort.Sort(ByKey(data))
+
+	for _, kv := range data {
 		if _, ex := pairs[kv.Key]; ex != true {
 			pairs[kv.Key] = make([]string, 0, 1000)
 		}
 		pairs[kv.Key] = append(pairs[kv.Key], kv.Value)
 	}
-	_, err = dec.Token()
-	checkError(err)
+
 	ret := make([]KeyValue, 0, 1000)
 	for key, values := range pairs {
 		ret = append(ret, KeyValue{
@@ -87,7 +91,6 @@ func doReduce(
 			reduceF(key, values),
 		})
 	}
-	sort.Sort(ByKey(ret))
 	output, err := os.OpenFile(outFile, os.O_CREATE|os.O_WRONLY, 0666)
 	checkError(err)
 	defer output.Close()
