@@ -2,6 +2,7 @@ package mapreduce
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -63,6 +64,7 @@ func doReduce(
 
 	for mapTask := 0; mapTask < nMap; mapTask++ {
 		inFile := reduceName(jobName, mapTask, reduceTask)
+		fmt.Println(inFile)
 		input, err := os.Open(inFile)
 		checkError(err)
 		dec := json.NewDecoder(input)

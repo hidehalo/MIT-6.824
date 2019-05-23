@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 //
@@ -16,11 +17,16 @@ import (
 // of key/value pairs.
 //
 func mapF(filename string, contents string) []mapreduce.KeyValue {
+	fmt.Println(filename)
 	// Your code here (Part II).
-	keywords := strings.Split(contents, " ")
-	ret := make([]mapreduce.KeyValue, 0 ,1000)
-	for _,keyword := range keywords {
-		ret = append(ret, mapreduce.KeyValue{keyword, "1"})
+	keywords := strings.FieldsFunc(contents, func(c rune) bool {
+		return !unicode.IsLetter(c)
+	})
+	ret := make([]mapreduce.KeyValue, 0, 1000)
+	for _, keyword := range keywords {
+		if keyword != "" {
+			ret = append(ret, mapreduce.KeyValue{keyword, "1"})
+		}
 	}
 
 	return ret
@@ -34,8 +40,8 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 func reduceF(key string, values []string) string {
 	// Your code here (Part II).
 	count := 0
-	for _,value := range values {
-		tmp,_ := strconv.Atoi(value)
+	for _, value := range values {
+		tmp, _ := strconv.Atoi(value)
 		count += tmp
 	}
 
