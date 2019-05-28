@@ -45,12 +45,21 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 
 	wg.Add(ntasks)
 
+	// Receive existing registered workers (if any) and new ones as they register to idle channel
 	go func() {
 		for worker := range registerChan {
 			idle <- worker
 		}
 	}()
 
+	// Exit procedure
+	go func() {
+		wg.Wait()
+
+		exit <- true
+	}()
+
+	// Assign a task to any idle worker
 	for taskNumber := 0; taskNumber < ntasks; taskNumber++ {
 		if phase == mapPhase {
 			args = DoTaskArgs{
@@ -68,18 +77,15 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 				NumOtherPhase: n_other,
 			}
 		}
+		// Worker.DoTask procedure
 		go func(args DoTaskArgs) {
-			defer wg.Done()
-
 			worker := <-idle
-			// fmt.Printf("worker %s is ready to work\n", worker)
 			call(worker, "Worker.DoTask", args, nil)
-			// fmt.Printf("worker %s finished job\n", worker)
+			wg.Done()
+			// Put worker back to idle channel
 			idle <- worker
 		}(args)
 	}
 
-	wg.Wait()
-
-	close(idle)
+	<-exit
 }
