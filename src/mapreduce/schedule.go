@@ -43,6 +43,8 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 
 	exit := make(chan bool)
 
+	tasks := make(chan DoTaskArgs)
+
 	wg.Add(ntasks)
 
 	// Receive existing registered workers (if any) and new ones as they register to idle channel
@@ -77,15 +79,28 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 				NumOtherPhase: n_other,
 			}
 		}
-		// Worker.DoTask procedure
-		go func(args DoTaskArgs) {
-			worker := <-idle
-			call(worker, "Worker.DoTask", args, nil)
-			wg.Done()
-			// Put worker back to idle channel
-			idle <- worker
+		go func (args DoTaskArgs) {
+			tasks <- args
 		}(args)
 	}
 
-	<-exit
+	for {
+		select {
+		case args := <- tasks:
+		// Worker.DoTask procedure
+		go func(args DoTaskArgs) {
+			worker := <-idle
+			ret := call(worker, "Worker.DoTask", args, nil)
+			if ret {
+				wg.Done()
+			} else {
+				tasks <- args
+			}
+			// Put worker back to idle channel
+			idle <- worker
+		}(args)
+		case <-exit:
+			return
+		}
+	}
 }
