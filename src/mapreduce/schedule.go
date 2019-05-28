@@ -37,35 +37,49 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 
 	var wg sync.WaitGroup
 
-	if phase == mapPhase {
-		for i,inFile := range mapFiles {
-			wg.Add(1)
-			go func () {
-				args :=  DoTaskArgs{
-					JobName: jobName,
-					File: inFile,
-					Phase: phase,
-					TaskNumber: i,
-					NumOtherPhase: n_other,
-				}
-				call(<-registerChan, "Worker.DoTask", args, new(struct{}))
-				wg.Done()
-			}()
-			wg.Wait()
+	var args DoTaskArgs
+
+	idle := make(chan string)
+
+	exit := make(chan bool)
+
+	wg.Add(ntasks)
+
+	go func() {
+		for worker := range registerChan {
+			idle <- worker
 		}
-	} else {
-		for i:=0; i<ntasks; i++ {
-			wg.Add(1)
-			go func () {
-				args :=  DoTaskArgs{
-					JobName: jobName,
-					Phase: phase,
-					TaskNumber: i,
-					NumOtherPhase: n_other,
-				}
-				call(<-registerChan, "Worker.DoTask", args, new(struct{}))
-			}()
-			wg.Wait()
+	}()
+
+	for taskNumber := 0; taskNumber < ntasks; taskNumber++ {
+		if phase == mapPhase {
+			args = DoTaskArgs{
+				JobName:       jobName,
+				File:          mapFiles[taskNumber],
+				Phase:         phase,
+				TaskNumber:    taskNumber,
+				NumOtherPhase: n_other,
+			}
+		} else {
+			args = DoTaskArgs{
+				JobName:       jobName,
+				Phase:         phase,
+				TaskNumber:    taskNumber,
+				NumOtherPhase: n_other,
+			}
 		}
+		go func(args DoTaskArgs) {
+			defer wg.Done()
+
+			worker := <-idle
+			// fmt.Printf("worker %s is ready to work\n", worker)
+			call(worker, "Worker.DoTask", args, nil)
+			// fmt.Printf("worker %s finished job\n", worker)
+			idle <- worker
+		}(args)
 	}
+
+	wg.Wait()
+
+	close(idle)
 }
